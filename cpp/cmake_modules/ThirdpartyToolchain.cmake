@@ -3238,18 +3238,48 @@ macro(build_bzip2)
     list(APPEND BZIP2_EXTRA_ARGS RANLIB=${CMAKE_RANLIB})
   endif()
 
-  externalproject_add(bzip2_ep
-                      ${EP_COMMON_OPTIONS}
-                      CONFIGURE_COMMAND ""
-                      BUILD_IN_SOURCE 1
-                      BUILD_COMMAND ${MAKE} libbz2.a ${MAKE_BUILD_ARGS}
-                                    ${BZIP2_EXTRA_ARGS}
-                      INSTALL_COMMAND ${MAKE} install -j1 PREFIX=${BZIP2_PREFIX}
+  if(MSVC)
+    find_program(BZIP2_NMAKE nmake REQUIRED)
+    get_filename_component(BZIP2_COMPILER_DIR "${CMAKE_C_COMPILER}" DIRECTORY)
+    get_filename_component(BZIP2_COMPILER_NAME "${CMAKE_C_COMPILER}" NAME)
+    set(BZIP2_MSVC_C_FLAGS "${EP_C_FLAGS} -DWIN32 -D_FILE_OFFSET_BITS=64 -nologo")
+    foreach(CONFIG DEBUG MINSIZEREL RELEASE RELWITHDEBINFO)
+      string(APPEND BZIP2_MSVC_C_FLAGS
+             " $<$<CONFIG:${CONFIG}>:${EP_C_FLAGS_${CONFIG}}>")
+    endforeach()
+    externalproject_add(bzip2_ep
+                        ${EP_COMMON_OPTIONS}
+                        CONFIGURE_COMMAND ""
+                        BUILD_IN_SOURCE 1
+                        BUILD_COMMAND ${CMAKE_COMMAND} -E env --modify
+                                      "PATH=path_list_prepend:${BZIP2_COMPILER_DIR}" --
+                                      "${BZIP2_NMAKE}" /NOLOGO /F makefile.msc lib
+                                      "CC=${BZIP2_COMPILER_NAME}"
+                                      "CFLAGS=${BZIP2_MSVC_C_FLAGS}"
+                        INSTALL_COMMAND ${CMAKE_COMMAND} -E make_directory
+                                        "${BZIP2_PREFIX}/lib" "${BZIP2_PREFIX}/include"
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                                <SOURCE_DIR>/libbz2.lib "${BZIP2_STATIC_LIB}"
+                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                                <SOURCE_DIR>/bzlib.h "${BZIP2_PREFIX}/include/bzlib.h"
+                        INSTALL_DIR ${BZIP2_PREFIX}
+                        URL ${ARROW_BZIP2_SOURCE_URL}
+                        URL_HASH "SHA256=${ARROW_BZIP2_BUILD_SHA256_CHECKSUM}"
+                        BUILD_BYPRODUCTS "${BZIP2_STATIC_LIB}")
+  else()
+    externalproject_add(bzip2_ep
+                        ${EP_COMMON_OPTIONS}
+                        CONFIGURE_COMMAND ""
+                        BUILD_IN_SOURCE 1
+                        BUILD_COMMAND ${MAKE} libbz2.a ${MAKE_BUILD_ARGS}
                                       ${BZIP2_EXTRA_ARGS}
-                      INSTALL_DIR ${BZIP2_PREFIX}
-                      URL ${ARROW_BZIP2_SOURCE_URL}
-                      URL_HASH "SHA256=${ARROW_BZIP2_BUILD_SHA256_CHECKSUM}"
-                      BUILD_BYPRODUCTS "${BZIP2_STATIC_LIB}")
+                        INSTALL_COMMAND ${MAKE} install -j1 PREFIX=${BZIP2_PREFIX}
+                                        ${BZIP2_EXTRA_ARGS}
+                        INSTALL_DIR ${BZIP2_PREFIX}
+                        URL ${ARROW_BZIP2_SOURCE_URL}
+                        URL_HASH "SHA256=${ARROW_BZIP2_BUILD_SHA256_CHECKSUM}"
+                        BUILD_BYPRODUCTS "${BZIP2_STATIC_LIB}")
+  endif()
 
   file(MAKE_DIRECTORY "${BZIP2_PREFIX}/include")
   add_library(BZip2::BZip2 STATIC IMPORTED)
